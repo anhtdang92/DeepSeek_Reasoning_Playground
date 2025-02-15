@@ -17,9 +17,10 @@ This project is an experimental playground to test and compare the reasoning cap
 
 This project will be executed on the following hardware configuration:
 
-- **GPU:** NVIDIA RTX 4090  
+- **GPU:** NVIDIA GeForce RTX 4090 (24GB VRAM, Driver Version: 32.0.15.7242)
 - **Memory:** 64 GB RAM  
-- **CPU:** AMD Ryzen 9 5950X  
+- **CPU:** AMD Ryzen 9 5950X (16 Cores, 32 Threads, 3.4 GHz Base / 4.9 GHz Boost)  
+- **OS:** Microsoft Windows 11 Home N (Version 10.0.26120, Build 26120)
 
 This configuration represents a high-end consumer-level PC, providing a practical environment for running advanced AI models locally.
 
