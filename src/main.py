@@ -1,102 +1,132 @@
 import os
 import time
 import torch
+import datetime
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+def log_conversation(user_input, response, file_path="conversation_log.txt"):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(file_path, "a", encoding="utf-8") as f:
+        f.write(f"{timestamp} - User: {user_input}\n")
+        f.write(f"{timestamp} - Response: {response}\n")
+        f.write("-" * 50 + "\n")
 
 def load_model(model_name):
     print(f"Loading model: {model_name} ...")
-    # If the model is private, ensure you're authenticated (token=True picks up your stored token)
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name, 
-        token=True,
-        trust_remote_code=True  # if required by the model
-    )
-    
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        token=True,
-        trust_remote_code=True,   # if required
+        trust_remote_code=True,
         device_map="auto",
-        low_cpu_mem_usage=True   # or load_in_8bit=True if needed
+        low_cpu_mem_usage=True
     )
-    
-    # Set the model to evaluation mode to disable dropout and gradient computations
     model.eval()
-
     if torch.cuda.is_available():
-        print("CUDA is available; model has been dispatched automatically.")
+        print("CUDA is available; model dispatched automatically.")
     else:
-        print("CUDA is not available. Running on CPU.")
-    
+        print("Running on CPU.")
     return tokenizer, model
 
-def generate_response(tokenizer, model, prompt, max_new_tokens=50, temperature=0.7):
+def generate_response(tokenizer, model, prompt, max_new_tokens=450, temperature=0.7):
     inputs = tokenizer(prompt, return_tensors="pt")
-    # Move inputs to GPU if available
     if torch.cuda.is_available():
         inputs = {k: v.to("cuda") for k, v in inputs.items()}
     
     print("Generation started...")
     start_time = time.time()
-    # Disable gradient computation for inference
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=True,
             temperature=temperature,
-            top_p=0.95
+            top_p=0.95,
+            eos_token_id=tokenizer.eos_token_id
         )
     end_time = time.time()
-    print("Generation finished.")
-    print(f"Generation took {end_time - start_time:.2f} seconds.")
+    print(f"Generation finished in {end_time - start_time:.2f} seconds.")
     
-    # Remove the prompt tokens from the generated output
     prompt_length = inputs["input_ids"].shape[-1]
     generated_tokens = outputs[0][prompt_length:]
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     return response
 
+def chain_generate(tokenizer, model, initial_prompt, max_new_tokens=512, temperature=0.7, final_marker="\\boxed{", max_iterations=100):
+    """
+    Iteratively generate output until the final marker is found.
+    Uses a sliding window of recent context to avoid resending the entire history.
+    """
+    complete_response = ""
+    context = initial_prompt.strip()
+    
+    for i in range(max_iterations):
+        print(f"Iteration {i+1} of chaining...")
+        # Use only the last few lines of the current output as recent context.
+        if complete_response:
+            recent_context = "\n".join(complete_response.splitlines()[-5:])
+            prompt = f"{initial_prompt}\n{recent_context}\n[Continue the reasoning without repeating previous steps.]"
+        else:
+            prompt = context
+        
+        partial_response = generate_response(tokenizer, model, prompt, max_new_tokens, temperature)
+        if not partial_response.strip():
+            print("No additional text generated; stopping iteration.")
+            break
+        
+        # Append only the new part (if partial_response already starts with our complete_response, trim it)
+        if complete_response and partial_response.startswith(complete_response):
+            new_text = partial_response[len(complete_response):]
+        else:
+            new_text = partial_response
+        
+        complete_response += new_text.strip() + "\n"
+        
+        if final_marker in complete_response:
+            print("Final marker found; stopping iteration.")
+            break
+
+    return complete_response.strip()
+
 def main():
-    # Use the 7B model identifier for faster inference on consumer hardware.
     model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
     tokenizer, model = load_model(model_name)
-
+    
     print("Welcome to Reasoning Playground!")
     print("Type your prompt and press Enter (type 'exit' to quit).")
     print("Type 'reason' to use a default reasoning prompt for testing.")
     print("For a simple chat, try typing 'hello'.\n")
-
-    # Default reasoning prompt that encourages step-by-step reasoning
+    
     reasoning_prompt = (
-        "Please solve the following problem step by step:\n"
+        "Please solve the following problem step by step. "
+        "Do not repeat any previously provided steps. "
+        "Ensure your answer is complete and concise. "
+        "Provide your final answer within \\boxed{...}.\n\n"
+        "**Problem:**\n"
         "A train travels 300 miles in 5 hours and then 400 miles in 8 hours. "
-        "What is its average speed for the entire journey? "
-        "Present your step-by-step reasoning and provide your final answer within \\boxed{...}."
+        "What is its average speed for the entire journey?"
     )
     
-    # Simple chat prefix to encourage succinct responses
     simple_chat_prefix = "You are a friendly chatbot. Respond in a short and simple manner."
     
     while True:
-        user_input = input(">> ")
-        if user_input.strip().lower() in ["exit", "quit"]:
+        user_input = input(">> ").strip()
+        if user_input.lower() in ["exit", "quit"]:
             print("Goodbye!")
             break
-        elif user_input.strip().lower() == "reason":
+        elif user_input.lower() == "reason":
             prompt = reasoning_prompt
-            max_new_tokens = 1000  # allow longer output for reasoning
-        elif user_input.strip().lower() == "hello":
+            response = chain_generate(tokenizer, model, prompt, max_new_tokens=512, temperature=0.7)
+        elif user_input.lower() == "hello":
             prompt = f"{simple_chat_prefix}\n{user_input}"
-            max_new_tokens = 50
+            response = generate_response(tokenizer, model, prompt, max_new_tokens=450, temperature=0.7)
         else:
             prompt = user_input
-            max_new_tokens = 50
+            response = generate_response(tokenizer, model, prompt, max_new_tokens=450, temperature=0.7)
         
-        response = generate_response(tokenizer, model, prompt, max_new_tokens=max_new_tokens)
         print("\nResponse:")
         print(response)
         print("-" * 50)
+        log_conversation(user_input, response)
 
 if __name__ == "__main__":
     main()
