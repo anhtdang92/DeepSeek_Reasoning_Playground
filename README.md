@@ -1,11 +1,11 @@
 # DeepSeek_Reasoning_Playground
 
-This project is an experimental playground to test and compare the reasoning capabilities of DeepSeek models against popular OpenAI models. The goal is to evaluate the performance, response quality, and efficiency of the **deepseek-ai/DeepSeek-R1-Distill-Qwen-32B** model when running on consumer-grade hardware.
+This project is an experimental playground to test and compare the reasoning capabilities of DeepSeek models against popular OpenAI models. The goal is to evaluate the performance, response quality, and efficiency of the **deepseek-ai/DeepSeek-R1-Distill-Qwen-7B** model when running on consumer-grade hardware.
 
 ## Project Scope
 
 - **Experimentation:**  
-  Test the capabilities of **deepseek-ai/DeepSeek-R1-Distill-Qwen-32B** by generating responses for various prompts, especially those that challenge reasoning, math, and coding abilities.
+  Test the capabilities of **deepseek-ai/DeepSeek-R1-Distill-Qwen-7B** by generating responses for various prompts, especially those that challenge reasoning, math, and coding abilities.
 
 - **Comparison:**  
   Benchmark its performance against OpenAI models (such as GPT-4) in terms of response accuracy, generation speed, and overall effectiveness in handling complex tasks.

@@ -45,12 +45,17 @@ def generate_response(tokenizer, model, prompt, max_new_tokens=50, temperature=0
             max_new_tokens=max_new_tokens,
             do_sample=True,
             temperature=temperature,
+            top_p=0.95
         )
     end_time = time.time()
     print("Generation finished.")
     print(f"Generation took {end_time - start_time:.2f} seconds.")
     
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # Remove the prompt tokens from the generated output
+    prompt_length = inputs["input_ids"].shape[-1]
+    generated_tokens = outputs[0][prompt_length:]
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    return response
 
 def main():
     # Use the 7B model identifier for faster inference on consumer hardware.
@@ -80,7 +85,7 @@ def main():
             break
         elif user_input.strip().lower() == "reason":
             prompt = reasoning_prompt
-            max_new_tokens = 500  # allow longer output for reasoning
+            max_new_tokens = 1000  # allow longer output for reasoning
         elif user_input.strip().lower() == "hello":
             prompt = f"{simple_chat_prefix}\n{user_input}"
             max_new_tokens = 50
