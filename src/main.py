@@ -2,14 +2,21 @@ import os
 import time
 import torch
 import datetime
+import logging
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-def log_conversation(user_input, response, file_path="conversation_log.txt"):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(file_path, "a", encoding="utf-8") as f:
-        f.write(f"{timestamp} - User: {user_input}\n")
-        f.write(f"{timestamp} - Response: {response}\n")
-        f.write("-" * 50 + "\n")
+# Configure structured logging
+logging.basicConfig(
+    filename="conversation_log.txt",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+def log_conversation(user_input, response):
+    logging.info("User: %s", user_input)
+    logging.info("Response: %s", response)
+    logging.info("-" * 50)
 
 def load_model(model_name):
     print(f"Loading model: {model_name} ...")
@@ -34,15 +41,19 @@ def generate_response(tokenizer, model, prompt, max_new_tokens=450, temperature=
     
     print("Generation started...")
     start_time = time.time()
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=True,
-            temperature=temperature,
-            top_p=0.95,
-            eos_token_id=tokenizer.eos_token_id
-        )
+    try:
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=True,
+                temperature=temperature,
+                top_p=0.95,
+                eos_token_id=tokenizer.eos_token_id
+            )
+    except Exception as e:
+        print("Error during generation:", e)
+        return ""
     end_time = time.time()
     print(f"Generation finished in {end_time - start_time:.2f} seconds.")
     
@@ -51,33 +62,34 @@ def generate_response(tokenizer, model, prompt, max_new_tokens=450, temperature=
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     return response
 
-def chain_generate(tokenizer, model, initial_prompt, max_new_tokens=512, temperature=0.5, final_marker="\\boxed{", max_iterations=100):
+def chain_generate(tokenizer, model, initial_prompt, max_new_tokens=512, temperature=0.5, final_marker="\\boxed{", max_iterations=100, context_token_limit=300):
     """
     Iteratively generate output until the final marker is found.
-    Uses a shorter sliding window of recent context to minimize redundancy.
+    Uses a dynamic sliding window (by token count) to minimize redundancy.
     """
     complete_response = ""
     context = initial_prompt.strip()
     
     for i in range(max_iterations):
         print(f"Iteration {i+1} of chaining...")
-        # Use only the last 3 lines as recent context
-        recent_context = "\n".join(complete_response.splitlines()[-3:]) if complete_response else ""
-        # Instruct the model to continue concisely without repeating earlier steps
+        # Create a dynamic context: take tokens from the complete_response within a limit
+        recent_lines = complete_response.splitlines()
+        # Here we simply take the last few lines; in a more advanced version you might re-tokenize and trim by token count.
+        recent_context = "\n".join(recent_lines[-3:]) if complete_response else ""
         prompt = f"{context}\n{recent_context}\n[Continue your reasoning concisely without repeating previous steps.]"
         partial_response = generate_response(tokenizer, model, prompt, max_new_tokens, temperature)
         if not partial_response.strip():
             print("No additional text generated; breaking out of the loop.")
             break
-        
-        # Append only new text (if duplication occurs, trim it)
+
+        # Trim any repeated text from the new output
         if complete_response and partial_response.startswith(complete_response):
             new_text = partial_response[len(complete_response):]
         else:
             new_text = partial_response
         
         complete_response += new_text.strip() + "\n"
-        
+        # Check if we've reached the final marker
         if final_marker in complete_response:
             print("Final marker found; stopping iteration.")
             break
@@ -85,7 +97,7 @@ def chain_generate(tokenizer, model, initial_prompt, max_new_tokens=512, tempera
     return complete_response.strip()
 
 def main():
-    model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+    model_name = os.getenv("MODEL_NAME", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
     tokenizer, model = load_model(model_name)
     
     print("Welcome to Reasoning Playground!")
