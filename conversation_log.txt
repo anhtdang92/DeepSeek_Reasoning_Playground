@@ -256,3 +256,4 @@ To determine the average speed of the train for the entire journey, we'll follow
 The average speed of the train for the entire journey is **53.9 mph**.
 2025-02-17 21:51:53 - INFO - --------------------------------------------------
 2025-02-17 21:54:40 - INFO - We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+2025-02-17 21:54:47 - WARNING - Some parameters are on the meta device because they were offloaded to the cpu.
